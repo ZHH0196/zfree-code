@@ -1,0 +1,89 @@
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Conv2DTranspose, concatenate
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+import numpy as np
+import json
+import cv2
+import os
+from sklearn.model_selection import KFold
+import pandas as pd
+from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import KFold
+
+# 定义U-Net模型，添加额外的卷积层和上采样层
+def unet(input_size=(256, 256, 1)):
+    inputs = Input(input_size)
+    conv1 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
+    conv1 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
+    pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+    conv2 = Conv2D(128, 3, activation='relu', padding='same', kernel_initializer='he_normal')(pool1)
+    conv2 = Conv2D(128, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
+    pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
+    # 可以继续添加更多的卷积和池化层
+    up9 = Conv2DTranspose(64, 2, strides=(2, 2), padding='same', kernel_initializer='he_normal')(conv2)  # 更改了上采样连接层
+    merge9 = concatenate([conv1, up9], axis=3)
+    conv9 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(merge9)
+    conv9 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
+    conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
+    model = Model(inputs=inputs, outputs=conv10)
+    return model
+
+# 加载数据和标签
+
+def train_model(images, labels):
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+    for train_idx, test_idx in kfold.split(images):
+        train_imgs, test_imgs = images[train_idx], images[test_idx]
+        train_labels, test_labels = labels[train_idx], labels[test_idx]
+        model = unet()
+        # 更新优化器参数为 `learning_rate` 替代 `lr`
+        model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        # 可根据需要调整批次大小和周期数
+        model.fit(train_imgs, train_labels, validation_data=(test_imgs, test_labels), batch_size=10, epochs=30)
+
+    return model
+
+# 训练和其他功能保持不变
+# 训练模型
+from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import KFold
+
+def train_model(images, labels):
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+    for train_idx, test_idx in kfold.split(images):
+        train_imgs, test_imgs = images[train_idx], images[test_idx]
+        train_labels, test_labels = labels[train_idx], labels[test_idx]
+        model = unet()
+        # 更新优化器参数为 `learning_rate` 替代 `lr`
+        model.compile(optimizer=Adam(learning_rate=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        # 可根据需要调整批次大小和周期数
+        model.fit(train_imgs, train_labels, validation_data=(test_imgs, test_labels), batch_size=10, epochs=30)
+
+    return model
+
+
+# 预测并保存结果
+def predict_and_save_results(model, test_folder, result_file):
+    results = []
+    for img_name in os.listdir(test_folder):
+        if img_name.endswith(".png"):
+            img_path = os.path.join(test_folder, img_name)
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            img = cv2.resize(img, (256, 256))
+            img = np.expand_dims(img, axis=-1)
+            pred = model.predict(np.array([img]))[0]
+            results.append({'img_name': img_name, 'prediction': pred.tolist()})
+    df = pd.DataFrame(results)
+    df.to_excel(result_file, index=False)
+# 主程序
+if __name__ == "__main__":
+    # 更新路径和扩展名
+    train_image_folder = r"C:\question2 image"
+    train_label_folder = r"C:\question2json"
+    test_folder = "C:\Figures"
+    result_file = 'Test_results1.0.xlsx'
+
+    train_images, train_labels = load_data_and_labels(train_image_folder, train_label_folder)
+    trained_model = train_model(train_images, train_labels)
+    predict_and_save_results(trained_model, test_folder, result_file)
